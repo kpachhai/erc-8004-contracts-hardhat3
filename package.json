@@ -1,0 +1,38 @@
+{
+  "name": "impl",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test",
+    "test:upgradeable": "hardhat test test/ERC8004Upgradeable.ts",
+    "test:all": "hardhat test test/ERC8004.ts && hardhat test test/ERC8004Upgradeable.ts",
+    "local": "npx hardhat node",
+    "deploy": "npx hardhat ignition deploy ./ignition/modules/ERC8004.ts --network localhost",
+    "deploy:upgradeable": "npx hardhat run scripts/deploy-upgradeable.ts --network localhost",
+    "deploy:upgradeable:hederaTestnet": "npx hardhat run scripts/deploy-upgradeable.ts --network hederaTestnet",
+    "verify:upgradeable:hederaTestnet": "NETWORK=hederaTestnet ./verify_all.sh",
+    "upgrade": "npx hardhat run scripts/upgrade-contracts.ts --network localhost",
+    "upgrade:hederaTestnet": "npx hardhat run scripts/upgrade-contracts.ts --network hederaTestnet"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^4.0.1",
+    "@nomicfoundation/hardhat-ignition": "^3.0.3",
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.0",
+    "@openzeppelin/contracts-upgradeable": "^5.4.0",
+    "@types/node": "^22.18.8",
+    "ethers": "^6.15.0",
+    "forge-std": "github:foundry-rs/forge-std#v1.9.4",
+    "hardhat": "^3.0.6",
+    "hashscan-verify": "^0.2.0",
+    "typescript": "~5.8.0",
+    "viem": "^2.38.0"
+  },
+  "type": "module",
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0"
+  }
+}
