@@ -41,3 +41,6 @@ Thumbs.db
 
 # Test output
 /test-results
+
+# Custom
+verify-bundles/

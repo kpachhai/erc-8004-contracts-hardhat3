@@ -2,53 +2,6 @@
 
 Implementation of the ERC-8004 protocol for agent discovery and trust through reputation and validation.
 
-## About
-
-This project implements **ERC-8004**, a protocol that enables discovering, choosing, and interacting with agents across organizational boundaries without pre-existing trust. It provides three core registries:
-
-- **Identity Registry**: A minimal on-chain handle based on ERC-721 with URIStorage extension that gives every agent a portable, censorship-resistant identifier
-- **Reputation Registry**: A standard interface for posting and fetching feedback signals, enabling composable reputation systems
-- **Validation Registry**: Generic hooks for requesting and recording independent validator checks (e.g., stakers re-running jobs, zkML verifiers, TEE oracles)
-
-## Project Structure
-
-```
-contracts/
-├── IdentityRegistry.sol     - ERC-721 based agent registration
-├── ReputationRegistry.sol   - Feedback and reputation tracking
-└── ValidationRegistry.sol   - Validation request/response system
-
-test/
-└── ERC8004.ts              - Comprehensive test suite
-
-ERC8004SPEC.md              - Full protocol specification
-```
-
-## Key Features
-
-### Identity Registry
-
-- ERC-721 NFT-based agent registration with auto-incrementing agent IDs
-- Token URI points to agent registration file (IPFS, HTTPS, etc.)
-- On-chain metadata storage for key-value pairs (e.g., agentWallet, agentName)
-- Support for metadata during registration
-
-### Reputation Registry
-
-- Clients can give feedback (0-100 score) with optional tags and off-chain file references
-- Pre-authorization via cryptographic signatures (`feedbackAuth`)
-- Support for feedback revocation and responses
-- On-chain aggregation (count, average score) with filtering by client addresses and tags
-- Multiple feedback entries per client-agent pair
-
-### Validation Registry
-
-- Agents request validation from specific validators
-- Validators respond with 0-100 scores and optional tags
-- Support for progressive validation states
-- Track all validations per agent and per validator
-- On-chain aggregation with filtering
-
 ## Installation
 
 ```shell
@@ -63,7 +16,7 @@ npm install
 npm run deploy:upgradeable:hederaTestnet
 ```
 
-### Verify on Hashscan
+### Verify (single command)
 
 After a successful run, copy the printed addresses:
 
@@ -89,78 +42,120 @@ export REP_IMPL=0x...
 export VAL_IMPL=0x...
 ```
 
-Run the helper script to verify all 3 implementations and 3 proxies on Hedera via `hashscan-verify` plugin on hardhat:
+Run the helper script to verify all 3 implementations and 3 proxies on Hedera via hashscan-verify (Hardhat v3 plugin):
 
 ```bash
 # Make sure the six env vars are set (see above)
 npm run verify:upgradeable:hederaTestnet
 ```
 
-## Running Tests
+### How verification works (under the hood)
 
-Run all tests:
+The verify script calls Hardhat’s hashscan-verify task with explicit contracts and positional constructor args for proxies.
 
-```shell
-npm test
+1. Implementations
+
+```bash
+# Identity
+npx hardhat hashscan-verify "$ID_IMPL" \
+  --contract "contracts/IdentityRegistryUpgradeable.sol:IdentityRegistryUpgradeable" \
+  --network hederaTestnet
+
+# Reputation
+npx hardhat hashscan-verify "$REP_IMPL" \
+  --contract "contracts/ReputationRegistryUpgradeable.sol:ReputationRegistryUpgradeable" \
+  --network hederaTestnet
+
+# Validation
+npx hardhat hashscan-verify "$VAL_IMPL" \
+  --contract "contracts/ValidationRegistryUpgradeable.sol:ValidationRegistryUpgradeable" \
+  --network hederaTestnet
 ```
 
-Or using Hardhat directly:
+2. Proxies (constructor is (address \_logic, bytes \_data), passed positionally)
 
-```shell
-npx hardhat test
+```bash
+# Initializer calldatas
+IDENTITY_INIT=0x8129fc1c                                # initialize()
+# initialize(address) selector = 0xc4d66de8
+pad64() { x="${1#0x}"; printf "%064s" "$x" | tr ' ' '0'; }
+ID_PROXY_P=$(pad64 "$ID_PROXY")
+REPUTATION_INIT="0xc4d66de8${ID_PROXY_P}"
+VALIDATION_INIT="0xc4d66de8${ID_PROXY_P}"
+
+# Identity proxy
+npx hardhat hashscan-verify "$ID_PROXY" \
+  --contract "contracts/ERC1967Proxy.sol:ERC1967Proxy" \
+  "$ID_IMPL" "$IDENTITY_INIT" \
+  --network hederaTestnet
+
+# Reputation proxy
+npx hardhat hashscan-verify "$REP_PROXY" \
+  --contract "contracts/ERC1967Proxy.sol:ERC1967Proxy" \
+  "$REP_IMPL" "$REPUTATION_INIT" \
+  --network hederaTestnet
+
+# Validation proxy
+npx hardhat hashscan-verify "$VAL_PROXY" \
+  --contract "contracts/ERC1967Proxy.sol:ERC1967Proxy" \
+  "$VAL_IMPL" "$VALIDATION_INIT" \
+  --network hederaTestnet
 ```
 
-The test suite includes comprehensive coverage of:
+Notes:
 
-- Agent registration and metadata management
-- Feedback submission, revocation, and responses
-- FeedbackAuth signature verification (EIP-191)
-- Validation requests and responses
-- Permission controls and access restrictions
-- Summary calculations with filtering
-- Edge cases and error conditions
+- The task will prompt once for your Hardhat keystore password.
+- A perfect match is expected for implementations. Proxies may show perfect or partial matches depending on creation-bytecode checks.
 
-## Development
+## Manual verification on HashScan (upload metadata.json)
 
-This project uses:
+Prefer the UI route? Generate self-contained metadata.json files (with all sources embedded) and upload one file per address on HashScan.
 
-- **Hardhat 3** with native Node.js test runner (`node:test`)
-- **Viem** for Ethereum interactions
-- **TypeScript** for type safety
-- **OpenZeppelin Contracts** for ERC-721 implementation
+1. Export addresses from your deployment (or copy them from the console output):
 
-## Protocol Overview
+```bash
+export ID_IMPL=0x...
+export REP_IMPL=0x...
+export VAL_IMPL=0x...
 
-### Agent Registration
+export ID_PROXY=0x...
+export REP_PROXY=0x...
+export VAL_PROXY=0x...
+```
 
-Each agent is uniquely identified by:
+2. Generate inline metadata bundles:
 
-- `namespace`: eip155 (for EVM chains)
-- `chainId`: The blockchain network identifier
-- `identityRegistry`: The registry contract address
-- `agentId`: The ERC-721 token ID
+```bash
+./make_sourcify_inline_metadata.sh
+```
 
-### Trust Models
+This produces:
 
-ERC-8004 supports three pluggable trust models:
+```
+verify-bundles/
+  identity-impl/metadata.json
+  reputation-impl/metadata.json
+  validation-impl/metadata.json
+  proxy/metadata.json
+  MANIFEST.txt
+```
 
-1. **Reputation**: Client feedback and scoring
-2. **Validation**: Stake-secured re-execution, zkML proofs, or TEE oracles
-3. **TEE Attestation**: Trusted Execution Environment verification
+3. On HashScan, go to each contract’s page and click “Verify”, then upload the corresponding metadata.json:
 
-### Security Considerations
+- Example page: https://hashscan.io/testnet/contract/0x7c559a9f0d6045a1916f8d957337661de1a16732
 
-- Pre-authorization mitigates unauthorized feedback but doesn't prevent Sybil attacks
-- On-chain pointers and hashes ensure immutable audit trails
-- Validator incentives and slashing managed by specific validation protocols
-- Reputation aggregation expected to evolve with off-chain services
+Use this mapping:
 
-## Resources
+- Identity implementation address → upload `verify-bundles/identity-impl/metadata.json`
+- Reputation implementation address → upload `verify-bundles/reputation-impl/metadata.json`
+- Validation implementation address → upload `verify-bundles/validation-impl/metadata.json`
+- For each ERC1967 proxy (Identity/Reputation/Validation) → upload the same `verify-bundles/proxy/metadata.json`
 
-- [ERC-8004 Full Specification](./ERC8004SPEC.md)
-- [Hardhat Documentation](https://hardhat.org/docs)
-- [EIP-721: Non-Fungible Token Standard](https://eips.ethereum.org/EIPS/eip-721)
+Notes:
+
+- Hardhat v3 records dependency sources as npm/@package@version/...; ensure node_modules is installed (npm ci) so the script can inline them.
+- If the UI reports a mismatch, confirm your compile settings match deployment (solc, optimizer, viaIR). Re-run: npx hardhat clean && npx hardhat compile, regenerate bundles, and retry.
 
 ## License
 
-CC0 - Public Domain
+MIT
