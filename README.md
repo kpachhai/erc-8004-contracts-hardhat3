@@ -111,19 +111,7 @@ Notes:
 
 Prefer the UI route? Generate self-contained metadata.json files (with all sources embedded) and upload one file per address on HashScan.
 
-1. Export addresses from your deployment (or copy them from the console output):
-
-```bash
-export ID_IMPL=0x...
-export REP_IMPL=0x...
-export VAL_IMPL=0x...
-
-export ID_PROXY=0x...
-export REP_PROXY=0x...
-export VAL_PROXY=0x...
-```
-
-2. Generate inline metadata bundles:
+1. Generate inline metadata bundles:
 
 ```bash
 ./make_sourcify_inline_metadata.sh
@@ -140,7 +128,7 @@ verify-bundles/
   MANIFEST.txt
 ```
 
-3. On HashScan, go to each contract’s page and click “Verify”, then upload the corresponding metadata.json:
+2. On HashScan, go to each contract’s page and click “Verify”, then upload the corresponding metadata.json:
 
 - Example page: https://hashscan.io/testnet/contract/0x7c559a9f0d6045a1916f8d957337661de1a16732
 

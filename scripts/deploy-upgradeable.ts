@@ -1,18 +1,15 @@
 import hre from "hardhat";
-import { getCreate2Address, keccak256, encodeAbiParameters } from "viem";
+import { encodeAbiParameters } from "viem";
+import fs from "fs";
+import path from "path";
 
 /**
  * Deploy script for ERC-8004 upgradeable contracts using UUPS proxy pattern
  *
- * This script:
- * 1. Deploys implementation contracts for all three registries
- * 2. Deploys ERC1967Proxy for each implementation
- * 3. Initializes each proxy with appropriate parameters
- * 4. Returns proxy addresses for interaction
+ * USAGE: npx hardhat run scripts/deploy.ts
  */
 async function main() {
   const { viem } = await hre.network.connect();
-  const publicClient = await viem.getPublicClient();
   const [deployer] = await viem.getWalletClients();
 
   console.log("Deploying ERC-8004 Upgradeable Contracts");
@@ -20,129 +17,124 @@ async function main() {
   console.log("Deployer address:", deployer.account.address);
   console.log("");
 
-  // Step 1: Deploy IdentityRegistry Implementation
-  console.log("1. Deploying IdentityRegistry implementation...");
-  const identityRegistryImpl = await viem.deployContract("IdentityRegistryUpgradeable");
-  console.log("   Implementation deployed at:", identityRegistryImpl.address);
-
-  // Step 2: Deploy IdentityRegistry Proxy
-  console.log("2. Deploying IdentityRegistry proxy...");
-  // initialize() function selector with no parameters
-  const identityInitCalldata = "0x8129fc1c" as `0x${string}`;
-
+  // --- 1. Identity Registry ---
+  console.log("1. Deploying IdentityRegistry...");
+  const identityImpl = await viem.deployContract("IdentityRegistryUpgradeable");
+  const identityInitData = "0x8129fc1c" as `0x${string}`; // initialize()
   const identityProxy = await viem.deployContract("ERC1967Proxy", [
-    identityRegistryImpl.address,
-    identityInitCalldata
+    identityImpl.address,
+    identityInitData
   ]);
-  console.log("   Proxy deployed at:", identityProxy.address);
-  console.log("");
+  // We don't strictly need to get the contract instance for verification, just addresses
+  console.log(`   Impl:  ${identityImpl.address}`);
+  console.log(`   Proxy: ${identityProxy.address}`);
 
-  // Get IdentityRegistry instance through proxy
-  const identityRegistry = await viem.getContractAt(
-    "IdentityRegistryUpgradeable",
-    identityProxy.address
+  // --- 2. Reputation Registry ---
+  console.log("2. Deploying ReputationRegistry...");
+  const reputationImpl = await viem.deployContract(
+    "ReputationRegistryUpgradeable"
   );
-
-  // Step 3: Deploy ReputationRegistry Implementation
-  console.log("3. Deploying ReputationRegistry implementation...");
-  const reputationRegistryImpl = await viem.deployContract("ReputationRegistryUpgradeable");
-  console.log("   Implementation deployed at:", reputationRegistryImpl.address);
-
-  // Step 4: Deploy ReputationRegistry Proxy
-  console.log("4. Deploying ReputationRegistry proxy...");
-  // Encode the initialize(address) call
-  const reputationInitCalldata = encodeAbiParameters(
-    [{ name: "identityRegistry", type: "address" }],
-    [identityProxy.address]
-  );
-  // Prepend function selector for initialize(address): 0xc4d66de8
-  const reputationInitData = ("0xc4d66de8" + reputationInitCalldata.slice(2)) as `0x${string}`;
-
+  const reputationInitData = ("0xc4d66de8" +
+    encodeAbiParameters(
+      [{ name: "identityRegistry", type: "address" }],
+      [identityProxy.address]
+    ).slice(2)) as `0x${string}`; // initialize(address)
   const reputationProxy = await viem.deployContract("ERC1967Proxy", [
-    reputationRegistryImpl.address,
+    reputationImpl.address,
     reputationInitData
   ]);
-  console.log("   Proxy deployed at:", reputationProxy.address);
-  console.log("");
+  console.log(`   Impl:  ${reputationImpl.address}`);
+  console.log(`   Proxy: ${reputationProxy.address}`);
 
-  // Get ReputationRegistry instance through proxy
-  const reputationRegistry = await viem.getContractAt(
-    "ReputationRegistryUpgradeable",
-    reputationProxy.address
+  // --- 3. Validation Registry ---
+  console.log("3. Deploying ValidationRegistry...");
+  const validationImpl = await viem.deployContract(
+    "ValidationRegistryUpgradeable"
   );
-
-  // Step 5: Deploy ValidationRegistry Implementation
-  console.log("5. Deploying ValidationRegistry implementation...");
-  const validationRegistryImpl = await viem.deployContract("ValidationRegistryUpgradeable");
-  console.log("   Implementation deployed at:", validationRegistryImpl.address);
-
-  // Step 6: Deploy ValidationRegistry Proxy
-  console.log("6. Deploying ValidationRegistry proxy...");
-  // Encode the initialize(address) call
-  const validationInitCalldata = encodeAbiParameters(
-    [{ name: "identityRegistry", type: "address" }],
-    [identityProxy.address]
-  );
-  // Prepend function selector for initialize(address): 0xc4d66de8
-  const validationInitData = ("0xc4d66de8" + validationInitCalldata.slice(2)) as `0x${string}`;
-
+  const validationInitData = ("0xc4d66de8" +
+    encodeAbiParameters(
+      [{ name: "identityRegistry", type: "address" }],
+      [identityProxy.address]
+    ).slice(2)) as `0x${string}`; // initialize(address)
   const validationProxy = await viem.deployContract("ERC1967Proxy", [
-    validationRegistryImpl.address,
+    validationImpl.address,
     validationInitData
   ]);
-  console.log("   Proxy deployed at:", validationProxy.address);
-  console.log("");
+  console.log(`   Impl:  ${validationImpl.address}`);
+  console.log(`   Proxy: ${validationProxy.address}`);
 
-  // Get ValidationRegistry instance through proxy
-  const validationRegistry = await viem.getContractAt(
-    "ValidationRegistryUpgradeable",
-    validationProxy.address
-  );
-
-  // Verify deployments
-  console.log("Verifying deployments...");
-  console.log("=========================");
-
-  const identityVersion = await identityRegistry.read.getVersion();
-  console.log("IdentityRegistry version:", identityVersion);
-
-  const reputationVersion = await reputationRegistry.read.getVersion();
-  const reputationIdentityRegistry = await reputationRegistry.read.getIdentityRegistry();
-  console.log("ReputationRegistry version:", reputationVersion);
-  console.log("ReputationRegistry identityRegistry:", reputationIdentityRegistry);
-
-  const validationVersion = await validationRegistry.read.getVersion();
-  const validationIdentityRegistry = await validationRegistry.read.getIdentityRegistry();
-  console.log("ValidationRegistry version:", validationVersion);
-  console.log("ValidationRegistry identityRegistry:", validationIdentityRegistry);
-  console.log("");
-
-  // Summary
-  console.log("Deployment Summary");
-  console.log("==================");
-  console.log("IdentityRegistry Proxy:", identityProxy.address);
-  console.log("ReputationRegistry Proxy:", reputationProxy.address);
-  console.log("ValidationRegistry Proxy:", validationProxy.address);
-  console.log("");
-  console.log("Implementation Addresses:");
-  console.log("IdentityRegistry Implementation:", identityRegistryImpl.address);
-  console.log("ReputationRegistry Implementation:", reputationRegistryImpl.address);
-  console.log("ValidationRegistry Implementation:", validationRegistryImpl.address);
   console.log("");
   console.log("✅ All contracts deployed successfully!");
 
-  return {
-    proxies: {
-      identityRegistry: identityProxy.address,
-      reputationRegistry: reputationProxy.address,
-      validationRegistry: validationProxy.address
-    },
-    implementations: {
-      identityRegistry: identityRegistryImpl.address,
-      reputationRegistry: reputationRegistryImpl.address,
-      validationRegistry: validationRegistryImpl.address
-    }
-  };
+  // --- Auto-Generate Manual Verification Helper Script ---
+  const verifyScriptContent = `#!/bin/bash
+set -e
+
+# Auto-generated verification script (generated by deploy.ts)
+# Run this to generate metadata bundles for manual verification.
+
+# 1. Clean previous runs
+rm -f verify-bundles/MANIFEST.txt
+# We let generate_metadata_bundle.sh create the header.
+
+# 2. Export Implementation Addresses (for MANIFEST.txt)
+export IDENTITYREGISTRYUPGRADEABLE_ADDRESS=${identityImpl.address}
+export REPUTATIONREGISTRYUPGRADEABLE_ADDRESS=${reputationImpl.address}
+export VALIDATIONREGISTRYUPGRADEABLE_ADDRESS=${validationImpl.address}
+
+echo "Generating bundles for Implementations..."
+./generate_metadata_bundle.sh IdentityRegistryUpgradeable ReputationRegistryUpgradeable ValidationRegistryUpgradeable
+
+# 3. Export One Proxy Address (to serve as the example in manifest)
+export ERC1967PROXY_ADDRESS=${identityProxy.address}
+
+echo "Generating bundle for Proxy..."
+./generate_metadata_bundle.sh ERC1967Proxy
+
+# 4. Append Specific Proxy Details to Manifest
+MANIFEST="verify-bundles/MANIFEST.txt"
+
+{
+  echo "----------------------------------------------------------"
+  echo "DETAILED PROXY VERIFICATION DATA"
+  echo "----------------------------------------------------------"
+  echo ""
+  echo "1. ERC1967Proxy (Identity Registry)"
+  echo "   Address: ${identityProxy.address}"
+  echo "   Verify using file: verify-bundles/ERC1967Proxy/metadata.json"
+  echo "   Constructor Arguments (ABI Encoded):"
+  echo "     _logic: ${identityImpl.address}"
+  echo "     _data:  ${identityInitData}"
+  echo ""
+  echo "2. ERC1967Proxy (Reputation Registry)"
+  echo "   Address: ${reputationProxy.address}"
+  echo "   Verify using file: verify-bundles/ERC1967Proxy/metadata.json"
+  echo "   Constructor Arguments (ABI Encoded):"
+  echo "     _logic: ${reputationImpl.address}"
+  echo "     _data:  ${reputationInitData}"
+  echo ""
+  echo "3. ERC1967Proxy (Validation Registry)"
+  echo "   Address: ${validationProxy.address}"
+  echo "   Verify using file: verify-bundles/ERC1967Proxy/metadata.json"
+  echo "   Constructor Arguments (ABI Encoded):"
+  echo "     _logic: ${validationImpl.address}"
+  echo "     _data:  ${validationInitData}"
+  echo ""
+} >> "$MANIFEST"
+
+echo ""
+echo "✅ Verification bundles generated in verify-bundles/"
+echo "👉 Open verify-bundles/MANIFEST.txt to see instructions."
+`;
+
+  const scriptPath = path.join(
+    process.cwd(),
+    "make_sourcify_inline_metadata.sh"
+  );
+  fs.writeFileSync(scriptPath, verifyScriptContent);
+  try {
+    fs.chmodSync(scriptPath, "755");
+  } catch (e) {}
 }
 
 main().catch((error) => {

@@ -44,3 +44,4 @@ Thumbs.db
 
 # Custom
 verify-bundles/
+make_sourcify_inline_metadata.sh
